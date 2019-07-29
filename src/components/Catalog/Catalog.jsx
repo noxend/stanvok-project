@@ -14,8 +14,9 @@ export default class Catalog extends React.Component {
     beers: [],
     isListLoaded: false,
     isDetailsLoaded: false,
-    countResults: 20,
-    page: 1
+    countResults: 30,
+    page: 1,
+    searchByName: ''
   };
 
   selectItem = id => {
@@ -30,28 +31,31 @@ export default class Catalog extends React.Component {
   updatedDetails = () => {
     const { itemId } = this.state;
 
-    if (itemId) {
+    if (itemId && this.state.details.id !== itemId) {
       service.getSingle(itemId).then(result => {
         this.setState({
           details: result[0],
           isDetailsLoaded: true
         });
       });
+    } else {
+      this.setState({
+        details: this.state.details,
+        isDetailsLoaded: true
+      });
     }
   };
-
 
   componentDidMount = () => {
     const { id } = this.props.match.params;
     this.getData(this.state.page);
     this.pagination();
-    this.setState({ itemId: parseInt(id) }, () => {
-      this.updatedDetails();
-    });
+    this.setState({ itemId: parseInt(id) });
   };
 
   componentDidUpdate = (prewProps, prewState) => {
     const { id } = this.props.match.params;
+
     if (prewState.itemId !== parseInt(id) && id) {
       this.setState({ itemId: parseInt(id) }, () => {
         this.updatedDetails();
@@ -60,7 +64,7 @@ export default class Catalog extends React.Component {
   };
 
   closeDetails = () => {
-    this.setState({ itemId: null, isDetailsLoaded: false, details: {} });
+    this.setState({ itemId: null, isDetailsLoaded: false });
     this.props.history.push(`/catalog`);
   };
 
@@ -70,21 +74,106 @@ export default class Catalog extends React.Component {
 
     for (let i = 1; i <= countPages; i++) {
       items.push(
-        <li key={i} className={`page-item ${i === this.state.page ? 'active' : ''}`} onClick={ () => { this.getData(i) } }>
-          <div className="page-link">
-            {i}
-          </div>
+        <li
+          key={i}
+          className={`page-item ${i === this.state.page ? 'active' : ''}`}
+          onClick={() => {
+            this.setState(
+              {
+                page: i
+              },
+              () => {
+                this.getData(this.state.page);
+              }
+            );
+          }}
+        >
+          <div className="page-link">{i}</div>
         </li>
       );
     }
     return items;
   };
 
-  getData = (page) => {
-    console.log((page <= 0) ? (page >= 7) : page)
-    axios.get(`/beers?page=${page}&per_page=${this.state.countResults}`).then(result => {
-      this.setState({ beers: result.data, isListLoaded: true, page })
-    });
+  getData = () => {
+    this.setState({ isListLoaded: false });
+    axios
+      .get(`/beers?page=${this.state.page}&per_page=${this.state.countResults}`)
+      .then(result => {
+        this.setState({ beers: result.data, isListLoaded: true }, () => {
+          console.log(this.state.beers);
+        });
+      });
+  };
+
+  getDataBySearch = () => {   
+    this.setState({ isListLoaded: false });
+    axios
+      .get(
+        `/beers?beer_name=${this.state.searchByName}&page=${
+          this.state.page
+        }&per_page=${this.state.countResults}`
+      )
+      .then(result => {
+        this.setState({ beers: result.data, isListLoaded: true }, () => {
+          console.log(this.state.beers);
+        });
+      });
+  };
+
+  onSubmit = e => {
+    e.preventDefault();
+    this.setState(
+      {
+        page: 1
+      },
+      () => {
+        this.getDataBySearch();
+      }
+    );
+  };
+
+  handleChange = e => {
+    this.setState(
+      {
+        searchByName: e.target.value
+      },
+      () => {
+        if (!this.state.searchByName) {
+          this.getData(1);
+        }
+      }
+    );
+  };
+
+  incPage = () => {
+    this.setState(
+      {
+        page: this.state.page + 1
+      },
+      () => {
+        if (this.state.searchByName) {
+          this.getDataBySearch();
+        } else {
+          this.getData(this.state.page);
+        }
+      }
+    );
+  };
+
+  decPage = () => {
+    this.setState(
+      {
+        page: this.state.page - 1
+      },
+      () => {
+        if (this.state.searchByName) {
+          this.getDataBySearch();
+        } else {
+          this.getData(this.state.page);
+        }
+      }
+    );
   };
 
   render = () => {
@@ -106,7 +195,17 @@ export default class Catalog extends React.Component {
           <thead className="thead-dark">
             <tr>
               <th scope="col">#</th>
-              <th scope="col">Name</th>
+              <th scope="col">
+                Name
+                <form onSubmit={this.onSubmit}>
+                  <input
+                    type="text"
+                    onChange={this.handleChange}
+                    className="form-control"
+                    value={this.state.searchByName}
+                  />
+                </form>
+              </th>
               <th scope="col">Tagline</th>
               <th scope="col">First Brewed</th>
             </tr>
@@ -131,19 +230,76 @@ export default class Catalog extends React.Component {
           />
         ) : null}
         <nav aria-label="Page navigation example">
-          <ul className="pagination justify-content-center">
-            <li className="page-item" onClick={() => { this.getData(this.state.page - 1) }}>
-              <div className="page-link" href="#" tabindex="-1">
-                Previous
-              </div>
-            </li>
-            {this.pagination()}
-            <li className="page-item" onClick={() => { this.getData(this.state.page + 1) }}>
-              <div className="page-link" href="#">
-                Next
-              </div>
-            </li>
-          </ul>
+          {(() => {
+            if (this.state.searchByName) {
+              return (
+                <ul className="pagination justify-content-center">
+                  {this.state.page === 1 ? (
+                    ''
+                  ) : (
+                    <li
+                      className="page-item"
+                      onClick={() => {
+                        this.decPage();
+                      }}
+                    >
+                      <div className="page-link" href="#" tabIndex="-1">
+                        Previous
+                      </div>
+                    </li>
+                  )}
+                  {this.state.countResults !== this.state.beers.length ? (
+                    ''
+                  ) : (
+                    <li
+                      className="page-item"
+                      onClick={() => {
+                        this.incPage();
+                      }}
+                    >
+                      <div className="page-link" href="#">
+                        Next
+                      </div>
+                    </li>
+                  )}
+                </ul>
+              );
+            } else {
+              return (
+                <ul className="pagination justify-content-center">
+                  {this.state.page === 1 ? (
+                    ''
+                  ) : (
+                    <li
+                      className="page-item"
+                      onClick={() => {
+                        this.decPage();
+                      }}
+                    >
+                      <div className="page-link" href="#" tabIndex="-1">
+                        Previous
+                      </div>
+                    </li>
+                  )}
+                  {this.pagination()}
+                  {this.state.countResults !== this.state.beers.length ? (
+                    ''
+                  ) : (
+                    <li
+                      className="page-item"
+                      onClick={() => {
+                        this.incPage();
+                      }}
+                    >
+                      <div className="page-link" href="#">
+                        Next
+                      </div>
+                    </li>
+                  )}
+                </ul>
+              );
+            }
+          })()}
         </nav>
       </div>
     );
